@@ -88,10 +88,10 @@ static GstFlowReturn gst_thetauvcsrc_fill(GstBaseSrc * src, guint64 offset,
 
 enum
 {
-    PROP_0,
-    PROP_HW_SERIAL,
+    PROP_HW_SERIAL = 1,
     PROP_DEVICE_NUM,
-    PROP_MODE
+    PROP_MODE,
+    PROP_DEVICE_INDEX
 };
 
 /* pad templates */
@@ -185,13 +185,18 @@ gst_thetauvcsrc_class_init(GstThetauvcsrcClass * klass)
     g_object_class_install_property(gobject_class, PROP_DEVICE_NUM,
 	g_param_spec_int("device-number",
 	    "Device number",
-	    "Theta device to use", 0, G_MAXINT, 0, (GParamFlags)
+	    "Theta device to use", -1, G_MAXINT, -1, (GParamFlags)
 	    (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_CONSTRUCT)));
     g_object_class_install_property(gobject_class, PROP_MODE,
 	g_param_spec_enum("mode", "Video mode",
 	    "Video mode to playback",
 	    gst_thetauvc_mode_get_type(), 0, (GParamFlags)
 	    (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_CONSTRUCT)));
+    g_object_class_install_property(gobject_class, PROP_DEVICE_INDEX,
+	g_param_spec_int("device-index",
+	    "Device index",
+	    "Index of the device", -1, G_MAXINT, -1, (GParamFlags)
+	    (G_PARAM_READABLE | G_PARAM_STATIC_STRINGS)));
 }
 
 static void
@@ -426,17 +431,53 @@ gst_thetauvcsrc_start(GstBaseSrc * src)
 	return FALSE;
     }
 
-    res =
-	thetauvc_find_device(thetauvcsrc->ctx, &thetauvcsrc->dev,
-	thetauvcsrc->device_number);
-    if (res != UVC_SUCCESS) {
-	GST_ELEMENT_ERROR(src, RESOURCE, NOT_FOUND,
-	    ("Theta not found."), (NULL));
-	uvc_exit(thetauvcsrc->ctx);
-	return FALSE;
+    if (thetauvcsrc->serial != NULL) {
+	res = thetauvc_find_device_by_serial(thetauvcsrc->ctx, &thetauvcsrc->dev,
+		thetauvcsrc->serial);
+	if (res != UVC_SUCCESS) {
+	    GST_ELEMENT_ERROR(src, RESOURCE, NOT_FOUND,
+		("Theta (serial:%s) not found.", thetauvcsrc->serial), (NULL));
+	    uvc_exit(thetauvcsrc->ctx);
+	    return FALSE;
+	}
+	res = uvc_open(thetauvcsrc->dev, &thetauvcsrc->devh);
+    } else {
+	if (thetauvcsrc->device_number == -1) {
+	    int i;
+	    i = 0;
+	    while(1) {
+		res = thetauvc_find_device(thetauvcsrc->ctx, &thetauvcsrc->dev, i);
+		if (res != UVC_SUCCESS)
+		    break;
+		res = uvc_open(thetauvcsrc->dev, &thetauvcsrc->devh);
+		if (res == UVC_SUCCESS) {
+		    thetauvcsrc->device_index = i;
+		    break;
+		}
+		uvc_unref_device(thetauvcsrc->dev);
+		i++;
+	    };
+
+	    if (res != UVC_SUCCESS) {
+		GST_ELEMENT_ERROR(src, RESOURCE, NOT_FOUND,
+		    ("Found %d Theta(s), but none available.", i), (NULL));
+		uvc_exit(thetauvcsrc->ctx);
+		return FALSE;
+	    }
+	} else {
+	    res = thetauvc_find_device(thetauvcsrc->ctx, &thetauvcsrc->dev,
+		thetauvcsrc->device_number);
+	    if (res != UVC_SUCCESS) {
+		GST_ELEMENT_ERROR(src, RESOURCE, NOT_FOUND,
+		    ("Theta not found."), (NULL));
+		uvc_exit(thetauvcsrc->ctx);
+		return FALSE;
+	    }
+	    res = uvc_open(thetauvcsrc->dev, &thetauvcsrc->devh);
+	    thetauvcsrc->device_index = thetauvcsrc->device_number;
+	}
     }
 
-    res = uvc_open(thetauvcsrc->dev, &thetauvcsrc->devh);
     if (res != UVC_SUCCESS) {
 	GST_ELEMENT_ERROR(src, RESOURCE, OPEN_READ_WRITE,
 	    ("Could not open Theta."), (NULL));
@@ -444,8 +485,16 @@ gst_thetauvcsrc_start(GstBaseSrc * src)
 	return FALSE;
     }
 
-    res =
-	thetauvc_get_stream_ctrl_format_size(thetauvcsrc->devh,
+    if (thetauvcsrc->serial == NULL) {
+	uvc_device_descriptor_t *desc;
+	if (uvc_get_device_descriptor(thetauvcsrc->dev, &desc) == UVC_SUCCESS) {
+	    thetauvcsrc->serial = g_strdup(desc->serialNumber);
+	    uvc_free_device_descriptor(desc);
+	}
+    }
+    GST_DEBUG_OBJECT(thetauvcsrc, "Serial: %s", thetauvcsrc->serial);
+
+    res = thetauvc_get_stream_ctrl_format_size(thetauvcsrc->devh,
 	thetauvcsrc->mode, &thetauvcsrc->ctrl);
 
     uvc_start_streaming(thetauvcsrc->devh, &thetauvcsrc->ctrl, cb,

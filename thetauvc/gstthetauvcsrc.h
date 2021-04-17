@@ -53,6 +53,7 @@ struct _GstThetauvcsrc
     GstQueueArray *queue;
 
     gint    device_number;
+    gint    device_index;
     gchar  *serial;
     GstThetauvcModeEnum mode;
 

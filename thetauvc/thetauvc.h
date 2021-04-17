@@ -46,6 +46,8 @@ extern uvc_error_t thetauvc_find_devices(uvc_context_t *, uvc_device_t ***);
 extern uvc_error_t thetauvc_print_devices(uvc_context_t *, FILE *);
 extern uvc_error_t thetauvc_find_device(uvc_context_t *, uvc_device_t **,
 	unsigned int);
+extern uvc_error_t thetauvc_find_device_by_serial(uvc_context_t *,
+	uvc_device_t **, const char *);
 extern uvc_error_t thetauvc_get_stream_ctrl_format_size(uvc_device_handle_t *,
 	unsigned int, uvc_stream_ctrl_t *);
 extern uvc_error_t thetauvc_run_streaming(uvc_device_t *, uvc_device_handle_t **,
