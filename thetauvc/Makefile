@@ -1,6 +1,7 @@
 #CFLAGS+=-Wall -Werror
 CFLAGS += -g -Og
 OBJDIR=./obj
+DEPDIR=./.depend
 SRC = gstthetauvc.c gstthetauvcsrc.c thetauvc.c
 OBJ := $(addprefix $(OBJDIR)/,$(SRC:.c=.o))
 CFLAGS += $(shell pkg-config --cflags gstreamer-1.0 gstreamer-base-1.0 libuvc)
@@ -12,8 +13,6 @@ all: $(OBJDIR) gstthetauvc.so
 
 $(OBJDIR):
 	mkdir $(OBJDIR)
-#gstthetauvc.o: gstthetauvc.c gstthetauvc.h
-#	$(CC) -fPIC $(CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/%.o: %.c
 	$(CC) -fPIC $(CFLAGS) -c -o $@ $<
@@ -22,6 +21,16 @@ gstthetauvc.so: $(OBJ)
 	$(CC) -shared -o $@ $^  $(LDFLAGS)
 
 
-.PHONY: clean
+.PHONY: clean depend
 clean:
-	$(RM) -r $(OBJDIR) *~ *.o *.so
+	$(RM) -r $(OBJDIR) *~ *.o *.so $(DEPDIR)
+
+$(DEPDIR):
+	mkdir $(DEPDIR)
+
+depend: $(DEPDIR)
+	for f in $(SRC); do \
+		$(CC) $(CFLAGS) -c -MM -o $(DEPDIR)/$${f%.c}.d -MT $(OBJDIR)/$${f%.c}.o $$f ;\
+	done
+
+-include $(DEPDIR)/*.d
