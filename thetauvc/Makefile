@@ -23,7 +23,10 @@ gstthetauvc.so: $(OBJ)
 
 .PHONY: clean depend
 clean:
-	$(RM) -r $(OBJDIR) *~ *.o *.so $(DEPDIR)
+	$(RM) -r $(OBJDIR) *.o *.so
+
+mostlyclean: clean
+	$(RM) -r *~ $(DEPDIR)
 
 $(DEPDIR):
 	mkdir $(DEPDIR)

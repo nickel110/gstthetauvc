@@ -180,22 +180,22 @@ gst_thetauvcsrc_class_init(GstThetauvcsrcClass * klass)
     g_object_class_install_property(gobject_class, PROP_HW_SERIAL,
 	g_param_spec_string("serial",
 	    "Serial number",
-	    "The serial number of the THETA", NULL, (GParamFlags)
+	    "The serial number of the THETA", NULL,
 	    (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
     g_object_class_install_property(gobject_class, PROP_DEVICE_NUM,
 	g_param_spec_int("device-number",
 	    "Device number",
-	    "Theta device to use", -1, G_MAXINT, -1, (GParamFlags)
+	    "Theta device to use", -1, G_MAXINT, -1,
 	    (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_CONSTRUCT)));
     g_object_class_install_property(gobject_class, PROP_MODE,
 	g_param_spec_enum("mode", "Video mode",
 	    "Video mode to playback",
-	    gst_thetauvc_mode_get_type(), 0, (GParamFlags)
+	    gst_thetauvc_mode_get_type(), 0,
 	    (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_CONSTRUCT)));
     g_object_class_install_property(gobject_class, PROP_DEVICE_INDEX,
 	g_param_spec_int("device-index",
 	    "Device index",
-	    "Index of the device", -1, G_MAXINT, -1, (GParamFlags)
+	    "Index of the opened device", -1, G_MAXINT, -1,
 	    (G_PARAM_READABLE | G_PARAM_STATIC_STRINGS)));
 }
 
@@ -251,6 +251,9 @@ gst_thetauvcsrc_get_property(GObject * object, guint property_id,
 	break;
     case PROP_MODE:
 	g_value_set_enum(value, thetauvcsrc->mode);
+	break;
+    case PROP_DEVICE_INDEX:
+	g_value_set_int(value, thetauvcsrc->ctx ? thetauvcsrc->device_index : -1);
 	break;
     default:
 	G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
@@ -440,6 +443,7 @@ gst_thetauvcsrc_start(GstBaseSrc * src)
 	    uvc_exit(thetauvcsrc->ctx);
 	    return FALSE;
 	}
+	thetauvcsrc->device_index = -1;
 	res = uvc_open(thetauvcsrc->dev, &thetauvcsrc->devh);
     } else {
 	if (thetauvcsrc->device_number == -1) {
@@ -459,8 +463,12 @@ gst_thetauvcsrc_start(GstBaseSrc * src)
 	    };
 
 	    if (res != UVC_SUCCESS) {
-		GST_ELEMENT_ERROR(src, RESOURCE, NOT_FOUND,
-		    ("Found %d Theta(s), but none available.", i), (NULL));
+		if (i == 0)
+		    GST_ELEMENT_ERROR(src, RESOURCE, NOT_FOUND,
+		   	 ("Theta not found."), (NULL));
+		else
+		    GST_ELEMENT_ERROR(src, RESOURCE, NOT_FOUND,
+		   	 ("Found %d Theta(s), but none available.", i), (NULL));
 		uvc_exit(thetauvcsrc->ctx);
 		return FALSE;
 	    }
