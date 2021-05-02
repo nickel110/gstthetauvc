@@ -36,9 +36,15 @@
 extern "C" {
 #endif
 
+#define USBVID_RICOH 0x05ca
+#define USBPID_THETAS_UVC 0x2711
+#define USBPID_THETAV_UVC 0x2712
+#define USBPID_THETAZ1_UVC 0x2715
+
 enum thetauvc_mode_code {
 	THETAUVC_MODE_FHD_2997 = 0,
 	THETAUVC_MODE_UHD_2997,
+	THETAUVC_MODE_FHD_2997S,
 	THETAUVC_MODE_NUM
 };
 
@@ -52,7 +58,7 @@ extern uvc_error_t thetauvc_get_stream_ctrl_format_size(uvc_device_handle_t *,
 	unsigned int, uvc_stream_ctrl_t *);
 extern uvc_error_t thetauvc_run_streaming(uvc_device_t *, uvc_device_handle_t **,
 	unsigned int, uvc_frame_callback_t *, void *);
-
+extern uvc_error_t thetauvc_switch_configuration(uint8_t, uint8_t, uint8_t);
 
 #if defined(__cplsplus)
 }

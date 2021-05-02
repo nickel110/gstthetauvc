@@ -34,12 +34,9 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <libusb.h>
 #include "libuvc/libuvc.h"
 #include "thetauvc.h"
-
-#define USBVID_RICOH 0x05ca
-#define USBPID_THETAV_UVC 0x2712
-#define USBPID_THETAZ1_UVC 0x2715
 
 struct thetauvc_mode
 {
@@ -62,6 +59,12 @@ static thetauvc_mode_t stream_mode[] = {
      .mode = THETAUVC_MODE_FHD_2997,
      .width = 1920,
      .height = 960,
+     .fps = 29,
+     },
+    {
+     .mode = THETAUVC_MODE_FHD_2997S,
+     .width = 1920,
+     .height = 1080,
      .fps = 29,
      },
     {
@@ -100,7 +103,8 @@ thetauvc_find_devices(uvc_context_t * ctx, uvc_device_t *** devs)
 	    continue;
 
 	if (desc->idProduct == USBPID_THETAV_UVC
-	    || desc->idProduct == USBPID_THETAZ1_UVC) {
+	    || desc->idProduct == USBPID_THETAZ1_UVC
+	    || desc->idProduct == USBPID_THETAS_UVC) {
 	    void   *tmp_ptr;
 
 	    devcnt++;
@@ -283,6 +287,44 @@ thetauvc_run_streaming(uvc_device_t * dev, uvc_device_handle_t ** devh,
     res = uvc_start_streaming(*devh, &ctrl, cb, pdata, 0);
 
     uvc_close(*devh);
+
+    return UVC_SUCCESS;
+}
+
+uvc_error_t
+thetauvc_switch_configuration(uint8_t bus, uint8_t addr, uint8_t ncfg)
+{
+    libusb_context *ctx;
+    libusb_device_handle *devh;
+    libusb_device **udev, *dev;
+    int cfg, sz, i;
+
+    libusb_init(&ctx);
+    sz = libusb_get_device_list(ctx, &udev);
+    for (i = 0; i < sz; i++) {
+	dev = udev[i];
+	if (libusb_get_bus_number(dev) != bus)
+	    continue;
+	if (libusb_get_device_address(dev) == addr)
+	    break;
+    }
+
+    if (i == sz)
+        return UVC_ERROR_INVALID_PARAM;
+
+    libusb_open(dev, &devh);
+    libusb_get_configuration(devh, &cfg);
+
+    if (cfg != ncfg) {
+        libusb_detach_kernel_driver(devh, 0);
+	libusb_detach_kernel_driver(devh, 2);
+	libusb_detach_kernel_driver(devh, 3);
+	libusb_set_configuration(devh, ncfg);
+    }
+
+    libusb_close(devh);
+    libusb_free_device_list(udev, 1);
+    libusb_exit(ctx);
 
     return UVC_SUCCESS;
 }

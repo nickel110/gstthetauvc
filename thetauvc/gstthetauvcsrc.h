@@ -24,6 +24,8 @@
 #include <gst/base/base.h>
 #include <gst/video/video.h>
 
+#include <libusb.h>
+
 #include "libuvc/libuvc.h"
 #include "thetauvc.h"
 
@@ -63,6 +65,7 @@ struct _GstThetauvcsrc
     uvc_stream_ctrl_t ctrl;
 
     guint64 framecount;
+    uint16_t dev_pid;
 };
 
 struct _GstThetauvcsrcClass

@@ -19,7 +19,7 @@
 /**
  * SECTION:element-gstthetauvcsrc
  *
- * Read live strem from Theta V/Z1.
+ * Read live strem from Theta S/V/Z1.
  *
  * <refsect2>
  * <title>Example launch line</title>
@@ -46,6 +46,7 @@
 #include "libuvc/libuvc.h"
 #include "thetauvc.h"
 #include "gstthetauvcsrc.h"
+
 
 GST_DEBUG_CATEGORY_STATIC(gst_thetauvcsrc_debug_category);
 #define GST_CAT_DEFAULT gst_thetauvcsrc_debug_category
@@ -123,12 +124,18 @@ gst_thetauvcsrc_class_init(GstThetauvcsrcClass * klass)
     gst_caps_set_simple(c, "width", G_TYPE_INT, 1920, "height", G_TYPE_INT,
 	960, NULL);
     gst_caps_append(caps, c);
+
+    c = gst_caps_copy_nth(caps, 1);
+    gst_caps_set_simple(c, "width", G_TYPE_INT, 1920, "height", G_TYPE_INT,
+	1080, "profile", G_TYPE_STRING, "high", NULL);
+    gst_caps_append(caps, c);
+
     gst_element_class_add_pad_template(GST_ELEMENT_CLASS(klass),
 	gst_pad_template_new("src", GST_PAD_SRC, GST_PAD_ALWAYS, caps));
 
     gst_element_class_set_static_metadata(GST_ELEMENT_CLASS(klass),
 	"Theta UVC video source",
-	"Generic", "Reads live video from THETA V/Z1", "Koji Takeo <nickel110@icloud.com>");
+	"Generic", "Reads live video from THETA S/V/Z1", "Koji Takeo <nickel110@icloud.com>");
 
     gobject_class->set_property = gst_thetauvcsrc_set_property;
     gobject_class->get_property = gst_thetauvcsrc_get_property;
@@ -279,6 +286,14 @@ gst_thetauvcsrc_finalize(GObject * object)
 
     if (thetauvcsrc->devh) {
 	uvc_close(thetauvcsrc->devh);
+
+	if (thetauvcsrc->dev_pid == USBPID_THETAS_UVC) {
+	    uint16_t bus, addr;
+	    bus = uvc_get_bus_number(thetauvcsrc->dev);
+	    addr = uvc_get_device_address(thetauvcsrc->dev);
+	    thetauvc_switch_configuration(bus, addr, 1);
+	}
+
 	uvc_exit(thetauvcsrc->ctx);
     }
 
@@ -298,7 +313,10 @@ get_current_caps(GstThetauvcsrc *src)
 
     switch (mode) {
     case GST_THETAUVC_MODE_2K:
-	caps = gst_caps_copy_nth(pcaps, 1);
+	if (src->dev_pid == USBPID_THETAS_UVC)
+	    caps = gst_caps_copy_nth(pcaps, 2);
+	else
+	    caps = gst_caps_copy_nth(pcaps, 1);
 	break;
     case GST_THETAUVC_MODE_4K:
 	caps = gst_caps_copy_nth(pcaps, 0);
@@ -497,14 +515,29 @@ gst_thetauvcsrc_start(GstBaseSrc * src)
     if (thetauvcsrc->serial == NULL) {
 	if (uvc_get_device_descriptor(thetauvcsrc->dev, &desc) == UVC_SUCCESS) {
 	    thetauvcsrc->serial = g_strdup(desc->serialNumber);
+	    thetauvcsrc->dev_pid = desc->idProduct;
 	    uvc_free_device_descriptor(desc);
 	}
     }
     GST_DEBUG_OBJECT(thetauvcsrc, "Serial: %s", thetauvcsrc->serial);
 
+    if (thetauvcsrc->dev_pid == USBPID_THETAS_UVC) {
+	uint16_t bus, addr;
+	uvc_close(thetauvcsrc->devh);
+
+	bus = uvc_get_bus_number(thetauvcsrc->dev);
+	addr = uvc_get_device_address(thetauvcsrc->dev);
+	thetauvc_switch_configuration(bus, addr, 2);
+
+	uvc_open(thetauvcsrc->dev, &thetauvcsrc->devh);
+    }
+
     switch (thetauvcsrc->mode) {
     case GST_THETAUVC_MODE_2K:
-	mode = THETAUVC_MODE_FHD_2997;
+	if (thetauvcsrc->dev_pid == USBPID_THETAS_UVC)
+	    mode = THETAUVC_MODE_FHD_2997S;
+	else
+	    mode = THETAUVC_MODE_FHD_2997;
 	break;
     case GST_THETAUVC_MODE_4K:
 	mode = THETAUVC_MODE_UHD_2997;
@@ -712,8 +745,8 @@ gst_thetauvc_mode_get_type(void)
 {
     static gsize id = 0;
     static const GEnumValue mode[] = {
-	{GST_THETAUVC_MODE_2K, "1920x960", "2K"},
-	{GST_THETAUVC_MODE_4K, "3840x1920", "4K"},
+	{GST_THETAUVC_MODE_2K, "1920x960(THETA V/Z1)/1920x1080(THETA S)", "2K"},
+	{GST_THETAUVC_MODE_4K, "3840x1920(THETA V/Z1)", "4K"},
 	{0, NULL, NULL}
     };
 
@@ -724,4 +757,3 @@ gst_thetauvc_mode_get_type(void)
 
     return (GType) id;
 }
-
