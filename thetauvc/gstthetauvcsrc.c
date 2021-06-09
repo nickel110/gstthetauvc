@@ -193,8 +193,7 @@ gst_thetauvcsrc_init(GstThetauvcsrc * thetauvcsrc)
 {
     g_mutex_init(&thetauvcsrc->lock);
     g_cond_init(&thetauvcsrc->cond);
-    thetauvcsrc->queue =
-	gst_queue_array_new_for_struct(sizeof(GstBuffer *), 5);
+    thetauvcsrc->queue = gst_queue_array_new(5);
     thetauvcsrc->ctx = NULL;
     thetauvcsrc->devh = NULL;
     thetauvcsrc->dev = NULL;
@@ -424,6 +423,11 @@ cb(uvc_frame_t * frame, void *ptr)
     GST_BUFFER_TIMESTAMP(buffer) = thetauvcsrc->framecount * interval;
 
     g_mutex_lock(&thetauvcsrc->lock);
+    if (gst_queue_array_get_length(thetauvcsrc->queue) > 30) {
+	GstBuffer *b;
+	b = (GstBuffer *)gst_queue_array_pop_head(thetauvcsrc->queue);
+	gst_buffer_unref(b);
+    }
     gst_queue_array_push_tail(thetauvcsrc->queue, buffer);
     thetauvcsrc->framecount++;
     g_cond_signal(&thetauvcsrc->cond);
