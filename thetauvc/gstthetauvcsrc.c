@@ -117,7 +117,7 @@ gst_thetauvcsrc_class_init(GstThetauvcsrcClass * klass)
 	"height", G_TYPE_INT, 1920,
 	"framerate", GST_TYPE_FRACTION, 30000, 1001,
 	"stream-format", G_TYPE_STRING, "byte-stream",
-	"alignment", G_TYPE_STRING, "au",
+	"alignment", G_TYPE_STRING, "nal",
 	"profile", G_TYPE_STRING, "constrained-baseline", NULL);
 
     c = gst_caps_copy(caps);
