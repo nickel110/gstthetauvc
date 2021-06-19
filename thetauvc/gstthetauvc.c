@@ -23,12 +23,20 @@
 
 #include <gst/gst.h>
 #include "gstthetauvcsrc.h"
+#if defined(WITH_TRANSFORM_FILTER)
+#include "gstthetatransform.h"
+#endif
 
 static  gboolean
 plugin_init(GstPlugin * plugin)
 {
-    return gst_element_register(plugin, "thetauvcsrc", GST_RANK_NONE,
-	GST_TYPE_THETAUVCSRC);
+    if (!gst_element_register(plugin, "thetauvcsrc", GST_RANK_NONE, GST_TYPE_THETAUVCSRC))
+	return FALSE;
+#if defined(WITH_TRANSFORM_FILTER)
+    if (!gst_element_register(plugin, "thetatransform", GST_RANK_NONE, GST_TYPE_THETATRANSFORM))
+	return FALSE;
+#endif
+    return TRUE;
 }
 
 #ifndef VERSION
