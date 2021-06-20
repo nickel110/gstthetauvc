@@ -661,8 +661,11 @@ static  gboolean
 gst_thetauvcsrc_query(GstBaseSrc * src, GstQuery * query)
 {
     GstThetauvcsrc *thetauvcsrc = GST_THETAUVCSRC(src);
+    gboolean ret;
 
     GST_DEBUG_OBJECT(thetauvcsrc, "query");
+    ret = TRUE;
+
     switch (GST_QUERY_TYPE(query)) {
     case GST_QUERY_LATENCY:
 	{
@@ -681,10 +684,10 @@ gst_thetauvcsrc_query(GstBaseSrc * src, GstQuery * query)
 	}
 	break;
     default:
-	GST_BASE_SRC_CLASS(gst_thetauvcsrc_parent_class)->query(src, query);
+	ret = GST_BASE_SRC_CLASS(gst_thetauvcsrc_parent_class)->query(src, query);
 	break;
     }
-    return TRUE;
+    return ret;
 }
 
 /* notify subclasses of an event */

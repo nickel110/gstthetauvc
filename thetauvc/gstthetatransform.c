@@ -65,7 +65,9 @@ static void gst_thetatransform_get_property (GObject * object,
 static gboolean gst_thetatransform_set_caps(GstGLFilter *, GstCaps *, GstCaps *);
 static gboolean gst_thetatransform_start (GstGLBaseFilter *);
 static void gst_thetatransform_stop (GstGLBaseFilter *);
+static gboolean gst_thetatransform_filter(GstGLFilter *, GstBuffer *, GstBuffer *);
 static gboolean gst_thetatransform_filter_texture(GstGLFilter *, GstGLMemory *, GstGLMemory *);
+
 static gboolean draw(gpointer);
 
 enum
@@ -77,7 +79,8 @@ enum
     PROP_TBLFILE_L,
     PROP_TBLFILE_R,
     PROP_VSHADER_FILE,
-    PROP_FSHADER_FILE
+    PROP_FSHADER_FILE,
+    PROP_DISABLE_STITCH
 };
 
 
@@ -109,6 +112,7 @@ gst_thetatransform_class_init (GstThetatransformClass * klass)
 
   
     gl_filter_class->set_caps = GST_DEBUG_FUNCPTR (gst_thetatransform_set_caps);
+    gl_filter_class->filter = GST_DEBUG_FUNCPTR (gst_thetatransform_filter);
     gl_filter_class->filter_texture = GST_DEBUG_FUNCPTR (gst_thetatransform_filter_texture);
 
     gl_base_filter_class->supported_gl_api = GST_GL_API_OPENGL3 | GST_GL_API_GLES2;
@@ -117,15 +121,15 @@ gst_thetatransform_class_init (GstThetatransformClass * klass)
     g_object_class_install_property(gobject_class, PROP_ROT_X,
 	g_param_spec_float("rotX", "Rotation X",
 	    "Rotation angle around X-axis in degree by x-y-z intrinsic rotation",
-	    -180.f, 180.f, 0.f, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+	    -180.f, 180.f, 0.f, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE));
     g_object_class_install_property(gobject_class, PROP_ROT_Y,
 	g_param_spec_float("rotY", "Rotation Y",
 	    "Rotation angle around Y-axis in degree by x-y-z intrinsic rotation",
-	    -180.f, 180.f, -90.f, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+	    -180.f, 180.f, -90.f, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE));
     g_object_class_install_property(gobject_class, PROP_ROT_Z,
 	g_param_spec_float("rotZ", "Rotation Z",
 	    "Rotation angle around Z-axis in degree by x-y-z intrinsic rotation",
-	    -180.f, 180.f, 0.f, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+	    -180.f, 180.f, 0.f, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE));
     g_object_class_install_property(gobject_class, PROP_TBLFILE_L,
 	g_param_spec_string("tablefile-l", "Table file L",
 	    "transform table for left image", NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
@@ -138,8 +142,10 @@ gst_thetatransform_class_init (GstThetatransformClass * klass)
     g_object_class_install_property(gobject_class, PROP_FSHADER_FILE,
 	g_param_spec_string("fragment", "fragment shader filename",
 	    "Alternative fragment shader", NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-
+    g_object_class_install_property(gobject_class, PROP_DISABLE_STITCH,
+	g_param_spec_boolean("disable-stitch", "disable stitching",
+	    "Disable fisheye to equirectanguler transformation", FALSE,
+	    G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 
 static void
@@ -190,6 +196,9 @@ gst_thetatransform_set_property (GObject * object, guint property_id,
     case PROP_FSHADER_FILE:
 	thetatransform->fs_file = g_strdup(g_value_get_string(value));
 	break;
+    case PROP_DISABLE_STITCH:
+	thetatransform->skip_stitch = g_value_get_boolean(value);
+	break;
     default:
 	G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
 	break;
@@ -225,6 +234,9 @@ gst_thetatransform_get_property (GObject * object, guint property_id,
 	break;
     case PROP_FSHADER_FILE:
 	g_value_set_string(value, thetatransform->fs_file);
+	break;
+    case PROP_DISABLE_STITCH:
+	g_value_set_boolean(value, thetatransform->skip_stitch);
 	break;
     default:
 	G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -466,12 +478,35 @@ load_object(GstThetatransform *thetatransform)
     thetatransform->vao = vao;
 }
 
+static void
+rotation(GstThetatransform *thetatransform)
+{
+    float s[3], c[3], *mat;
+    int i;
+
+    for (i = 0; i < 3; i++) {
+	s[i] = sin(thetatransform->rotation[i] * M_PI / 180.);
+	c[i] = cos(thetatransform->rotation[i] * M_PI / 180.);
+    }
+
+    mat = thetatransform->mat;
+    mat[0] =  c[1] * c[2];
+    mat[1] = -c[1] * s[2];
+    mat[2] =  s[1];
+    mat[3] =  s[0] * s[1] * c[2] + c[0] * s[2];
+    mat[4] = -s[0] * s[1] * s[2] + c[0] * c[2];
+    mat[5] = -s[0] * c[1];
+    mat[6] = -c[0] * s[1] * c[2] + s[0] * s[2];
+    mat[7] =  c[0] * s[1] * s[2] + s[0] * c[2];
+    mat[8] =  c[0] * c[1];
+
+}
+
 static gboolean
 gst_thetatransform_start (GstGLBaseFilter * filter)
 {
     GstThetatransform *thetatransform = GST_THETATRANSFORM (filter);
     struct vertexElement *ve;
-    float s[3], c[3], *mat;
     int i;
     char *vs, *fs;
     gboolean ret;
@@ -495,37 +530,28 @@ gst_thetatransform_start (GstGLBaseFilter * filter)
 	free(vs);
     if (fs != f_code)
 	free(fs);
-    
-    if (ret) {
+    if (!ret)
+	return ret;
+
+    init_object(&thetatransform->vtx);
+
+    if (!thetatransform->skip_stitch) {
 	if (thetatransform->tbl_file_L == NULL || thetatransform->tbl_file_R == NULL) {
 	    GST_ELEMENT_ERROR(thetatransform, RESOURCE, NOT_FOUND,
 		("Require transform table files"), (NULL));
 	    return FALSE;
 	}
-	init_object(&thetatransform->vtx);
 	ret = init_tbl(thetatransform, thetatransform->tbl_file_L,
 	    thetatransform->tbl_file_R, 960./1080.);
+    } else {
+	thetatransform->tbl.x_count=120;
+	thetatransform->tbl.x_count=61;
+	thetatransform->tbl.data = (float *)malloc(sizeof(float) * 61 * 120 * 2);
 	
     }
 
     for (i = 0; i < 28; i++)
 	thetatransform->gap[i] = 0.f;
-
-    for (i = 0; i < 3; i++) {
-	s[i] = sin(thetatransform->rotation[i] * M_PI / 180.);
-	c[i] = cos(thetatransform->rotation[i] * M_PI / 180.);
-    }
-
-    mat = thetatransform->mat;
-    mat[0] =  c[1] * c[2];
-    mat[1] = -c[1] * s[2];
-    mat[2] =  s[1];
-    mat[3] =  s[0] * s[1] * c[2] + c[0] * s[2];
-    mat[4] = -s[0] * s[1] * s[2] + c[0] * c[2];
-    mat[5] = -s[0] * c[1];
-    mat[6] = -c[0] * s[1] * c[2] + s[0] * s[2];
-    mat[7] =  c[0] * s[1] * s[2] + s[0] * c[2];
-    mat[8] =  c[0] * c[1];
 
     return ret;
 }
@@ -556,6 +582,14 @@ gst_thetatransform_stop (GstGLBaseFilter * filter)
     }
 
     GST_GL_BASE_FILTER_CLASS(parent_class)->gl_stop(filter);
+}
+
+static gboolean
+gst_thetatransform_filter (GstGLFilter *filter, GstBuffer *inbuf, GstBuffer *outbuf)
+{
+    gst_object_sync_values (GST_OBJECT (filter), GST_BUFFER_PTS(inbuf));
+
+    return gst_gl_filter_filter_texture(filter, inbuf, outbuf);
 }
 
 static gboolean
@@ -596,8 +630,12 @@ draw(gpointer ptr)
 	free(thetatransform->vtx.indices);
     }
 
+    rotation(thetatransform);
+
     gl->ActiveTexture(GL_TEXTURE0);
     gl->BindTexture(GL_TEXTURE_2D, thetatransform->in_tex->tex_id);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
 
     gl->ActiveTexture(GL_TEXTURE1);
     gl->BindTexture(GL_TEXTURE_2D, thetatransform->tid);
@@ -606,6 +644,7 @@ draw(gpointer ptr)
     gst_gl_shader_set_uniform_1i(shader, "tbl", 1);
     gst_gl_shader_set_uniform_matrix_3fv(shader, "rmat", 1, GL_TRUE, thetatransform->mat);
     gst_gl_shader_set_uniform_2fv(shader, "gap", 14, thetatransform->gap);
+    gst_gl_shader_set_uniform_1i(shader, "skip_stitch", thetatransform->skip_stitch);
     gl->BindVertexArray(thetatransform->vao);
     gl->DrawElements(GL_TRIANGLES, thetatransform->vtx.i_count, GL_UNSIGNED_SHORT,  0);
 

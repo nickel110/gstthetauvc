@@ -63,6 +63,7 @@ struct _GstThetatransform
     GLuint vao, tid;
     gchar *tbl_file_L, *tbl_file_R;
     gchar *vs_file, *fs_file;
+    gboolean skip_stitch;
 };
 
 struct _GstThetatransformClass
