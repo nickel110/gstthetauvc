@@ -1,7 +1,7 @@
 # gstthetauvc - Gstreamer THETA UVC plugin
 ## Build and Install
 ### Prerequisites
-Gstreamer development package (on Ubuntu, libgstreamer1.0-dev) and [libuvc with UVC1.5/H.264 support](https://github.com/nickel110/gstthetauvc)
+Gstreamer development package (on Ubuntu, libgstreamer1.0-dev) and [libuvc with UVC1.5/H.264 support](https://github.com/nickel110/libuvc)
 are required.
 - If libuvc is installed to non-standard directory, you may need to set location of the libuvc.pc file to `PKG_CONFIG_PATH` environment variable.
 
