@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 K. Takeo. All rights reserved.
+ * Copyright 2020-2022 K. Takeo. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -40,6 +40,7 @@ extern "C" {
 #define USBPID_THETAS_UVC 0x2711
 #define USBPID_THETAV_UVC 0x2712
 #define USBPID_THETAZ1_UVC 0x2715
+#define USBPID_THETAX_UVC 0x2717
 
 enum thetauvc_mode_code {
 	THETAUVC_MODE_FHD_2997 = 0,

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 K. Takeo. All rights reserved.
+ * Copyright 2020-2022 K. Takeo. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -75,6 +75,8 @@ static thetauvc_mode_t stream_mode[] = {
      }
 };
 
+static const char iProduct[] = "RICOH THETA";
+
 uvc_error_t
 thetauvc_find_devices(uvc_context_t * ctx, uvc_device_t *** devs)
 {
@@ -102,9 +104,7 @@ thetauvc_find_devices(uvc_context_t * ctx, uvc_device_t *** devs)
 	if (uvc_get_device_descriptor(dev, &desc) != UVC_SUCCESS)
 	    continue;
 
-	if (desc->idProduct == USBPID_THETAV_UVC
-	    || desc->idProduct == USBPID_THETAZ1_UVC
-	    || desc->idProduct == USBPID_THETAS_UVC) {
+	if (desc->product && strncmp(desc->product, iProduct, strlen(iProduct)) == 0) {
 	    void   *tmp_ptr;
 
 	    devcnt++;
