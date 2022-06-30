@@ -38,3 +38,7 @@ For other properties, run `gst-inspect-1.0 thetauvcsrc`.
      - You may need to replace autoplugins (e.g. deocdebin/autovideoconvert/autovideosink) with platform specific plugins.
         - On Jetson platform, nvv4l2decoder/nvvidconv/nv3dsink respectively.
      - For the gstreamer pipeline description, see [comments in OpenCV source](https://github.com/opencv/opencv/blob/9da9e8244b75a3754ff3a5d07ffdac46ee28ab6b/modules/videoio/src/cap_gstreamer.cpp#L1016).
+
+### Use as an OBS video source
+Try [Gstreamer OBS Studio plugin](https://github.com/fzwoch/obs-gstreamer)
+    
