@@ -50,6 +50,20 @@
 
 GST_DEBUG_CATEGORY_STATIC(gst_thetauvcsrc_debug_category);
 #define GST_CAT_DEFAULT gst_thetauvcsrc_debug_category
+#define GST_THETAUVCSRC_CAPS_TEMPLATE "video/x-h264, "				\
+				   "width = " GST_VIDEO_SIZE_RANGE ", "		\
+				   "height = " GST_VIDEO_SIZE_RANGE ", "	\
+				   "framerate = " GST_VIDEO_FPS_RANGE ", "	\
+				   "stream-format = byte-stream, "		\
+				   "alignment = nal, "				\
+				   "profile = { high, constrained-baseline }"
+#define GST_THETAUVCSRC_CAPS_BASE  "video/x-h264, "			\
+				   "width = 3840, "			\
+				   "height = 1920, "			\
+				   "framerate = 30/1, "			\
+				   "stream-format = byte-stream, "	\
+				   "alignment = nal, "			\
+				   "profile = constrained-baseline"
 
 /* prototypes */
 
@@ -111,24 +125,8 @@ gst_thetauvcsrc_class_init(GstThetauvcsrcClass * klass)
 
     /* Setting up pads and setting metadata should be moved to
      * base_class_init if you intend to subclass this class. */
-    GstCaps *caps, *c;
-    caps = gst_caps_new_simple("video/x-h264",
-	"width", G_TYPE_INT, 3840,
-	"height", G_TYPE_INT, 1920,
-	"framerate", GST_TYPE_FRACTION, 30000, 1001,
-	"stream-format", G_TYPE_STRING, "byte-stream",
-	"alignment", G_TYPE_STRING, "nal",
-	"profile", G_TYPE_STRING, "constrained-baseline", NULL);
-
-    c = gst_caps_copy(caps);
-    gst_caps_set_simple(c, "width", G_TYPE_INT, 1920, "height", G_TYPE_INT,
-	960, NULL);
-    gst_caps_append(caps, c);
-
-    c = gst_caps_copy_nth(caps, 1);
-    gst_caps_set_simple(c, "width", G_TYPE_INT, 1920, "height", G_TYPE_INT,
-	1080, "profile", G_TYPE_STRING, "high", NULL);
-    gst_caps_append(caps, c);
+    GstCaps *caps;
+    caps = gst_caps_from_string(GST_THETAUVCSRC_CAPS_TEMPLATE);
 
     gst_element_class_add_pad_template(GST_ELEMENT_CLASS(klass),
 	gst_pad_template_new("src", GST_PAD_SRC, GST_PAD_ALWAYS, caps));
@@ -197,6 +195,7 @@ gst_thetauvcsrc_init(GstThetauvcsrc * thetauvcsrc)
     thetauvcsrc->ctx = NULL;
     thetauvcsrc->devh = NULL;
     thetauvcsrc->dev = NULL;
+    thetauvcsrc->current_caps = NULL;
 }
 
 void
@@ -295,6 +294,8 @@ gst_thetauvcsrc_finalize(GObject * object)
 
 	uvc_exit(thetauvcsrc->ctx);
     }
+    if (thetauvcsrc->current_caps != NULL)
+	gst_caps_unref(thetauvcsrc->current_caps);
 
     G_OBJECT_CLASS(gst_thetauvcsrc_parent_class)->finalize(object);
 }
@@ -302,27 +303,14 @@ gst_thetauvcsrc_finalize(GObject * object)
 static GstCaps *
 get_current_caps(GstThetauvcsrc *src)
 {
-    GstCaps *pcaps, *caps, *rcaps;
-    GstThetauvcModeEnum mode;
+    GstCaps *caps;
 
-    g_mutex_lock(&src->lock);
-    mode = src->mode;
-    g_mutex_unlock(&src->lock);
-    pcaps = gst_pad_get_pad_template_caps(GST_BASE_SRC_PAD(src));
+    if (src->current_caps != NULL)
+	caps = gst_caps_copy(src->current_caps);
+    else
+	caps = gst_pad_get_pad_template_caps(GST_BASE_SRC_PAD(src));
 
-    switch (mode) {
-    case GST_THETAUVC_MODE_2K:
-	if (src->dev_pid == USBPID_THETAS_UVC)
-	    caps = gst_caps_copy_nth(pcaps, 2);
-	else
-	    caps = gst_caps_copy_nth(pcaps, 1);
-	break;
-    case GST_THETAUVC_MODE_4K:
-	caps = gst_caps_copy_nth(pcaps, 0);
-	break;
-    }
-    gst_caps_unref(pcaps);
-
+    GST_DEBUG_OBJECT(src, "%s", gst_caps_to_string(caps));
     return caps;
 }
 
@@ -335,11 +323,7 @@ gst_thetauvcsrc_get_caps(GstBaseSrc * src, GstCaps * filter)
 
     GST_DEBUG_OBJECT(thetauvcsrc, "get_caps");
 
-    if (thetauvcsrc->devh) {
-	caps = get_current_caps(thetauvcsrc);
-    } else {
-	caps = gst_pad_get_pad_template_caps(GST_BASE_SRC_PAD(thetauvcsrc));
-    }
+    caps = get_current_caps(thetauvcsrc);
 
     if (filter) {
 	rcaps =
@@ -348,6 +332,8 @@ gst_thetauvcsrc_get_caps(GstBaseSrc * src, GstCaps * filter)
     } else {
 	rcaps = caps;
     }
+    GST_DEBUG_OBJECT(src, "filter: %s", gst_caps_to_string(filter));
+    GST_DEBUG_OBJECT(src, "rcaps: %s", gst_caps_to_string(rcaps));
     return rcaps;
 }
 
@@ -434,6 +420,39 @@ cb(uvc_frame_t * frame, void *ptr)
     g_mutex_unlock(&thetauvcsrc->lock);
 
     return;
+}
+
+static GstCaps *
+thetauvcsrc_fixate_srccaps(GstThetauvcsrc *thetauvcsrc)
+{
+    GstCaps *caps;
+    caps = gst_caps_from_string(GST_THETAUVCSRC_CAPS_BASE);
+    gst_caps_set_simple(caps, "width", G_TYPE_INT, thetauvcsrc->mode_val.width,
+	"height", G_TYPE_INT, thetauvcsrc->mode_val.height, NULL);
+
+    if (thetauvcsrc->dev_pid == USBPID_THETAS_UVC)
+	gst_caps_set_simple(caps, "profile", G_TYPE_STRING, "high", NULL);
+
+    unsigned int den, num;
+    den = 1001;
+    switch(thetauvcsrc->ctrl.dwFrameInterval) {
+    case 417083:					/* 23.98fps */
+        num = 25000;
+	break;
+    case 333667:					/* 29.97fps */
+	num = 30000;
+	break;
+    case 166833:					/* 59.94fps */
+	num = 60000;
+	break;
+    default: 						/* integer framerate */
+	num = 10000000 / thetauvcsrc->ctrl.dwFrameInterval;
+	den = 1;
+	break;
+    }
+    gst_caps_set_simple(caps, "framerate", GST_TYPE_FRACTION, num, den, NULL);
+
+    return caps;
 }
 
 /* start and stop processing, ideal for opening/closing the resource */
@@ -539,22 +558,24 @@ gst_thetauvcsrc_start(GstBaseSrc * src)
     switch (thetauvcsrc->mode) {
     case GST_THETAUVC_MODE_2K:
 	if (thetauvcsrc->dev_pid == USBPID_THETAS_UVC)
-	    mode = THETAUVC_MODE_FHD_2997S;
+	    mode = THETAUVC_MODE_FHD_S;
 	else
-	    mode = THETAUVC_MODE_FHD_2997;
+	    mode = THETAUVC_MODE_FHD;
 	break;
     case GST_THETAUVC_MODE_4K:
-	mode = THETAUVC_MODE_UHD_2997;
+	mode = THETAUVC_MODE_UHD;
 	break;
     }
     res = thetauvc_get_stream_ctrl_format_size(thetauvcsrc->devh,
-	mode, &thetauvcsrc->ctrl);
+	mode, &thetauvcsrc->ctrl, &thetauvcsrc->mode_val);
 
     if (res != UVC_SUCCESS) {
 	GST_ELEMENT_ERROR(src, RESOURCE, OPEN_READ_WRITE,
 	    ("No available stream"), (NULL));
 	return FALSE;
     }
+
+    thetauvcsrc->current_caps = thetauvcsrc_fixate_srccaps(thetauvcsrc);
 
     uvc_start_streaming(thetauvcsrc->devh, &thetauvcsrc->ctrl, cb,
 	thetauvcsrc, 0);

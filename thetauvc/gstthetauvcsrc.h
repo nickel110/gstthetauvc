@@ -58,6 +58,8 @@ struct _GstThetauvcsrc
     gint    device_index;
     gchar  *serial;
     GstThetauvcModeEnum mode;
+    GstCaps *current_caps;
+    thetauvc_mode_t mode_val;
 
     uvc_context_t *ctx;
     uvc_device_t *dev;

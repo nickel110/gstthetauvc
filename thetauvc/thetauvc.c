@@ -38,34 +38,24 @@
 #include "libuvc/libuvc.h"
 #include "thetauvc.h"
 
-struct thetauvc_mode
-{
-    unsigned int mode;
-    unsigned int width;
-    unsigned int height;
-    unsigned int fps;
-};
-
-typedef struct thetauvc_mode thetauvc_mode_t;
-
 static thetauvc_mode_t stream_mode[] = {
     {
-     .mode = THETAUVC_MODE_UHD_2997,
+     .mode = THETAUVC_MODE_UHD,
      .width = 3840,
      .height = 1920,
-     .fps = 29,
+     .fps = 0,
      },
     {
-     .mode = THETAUVC_MODE_FHD_2997,
+     .mode = THETAUVC_MODE_FHD,
      .width = 1920,
      .height = 960,
-     .fps = 29,
+     .fps = 0,
      },
     {
-     .mode = THETAUVC_MODE_FHD_2997S,
+     .mode = THETAUVC_MODE_FHD_S,
      .width = 1920,
      .height = 1080,
-     .fps = 29,
+     .fps = 0,
      },
     {
      .mode = THETAUVC_MODE_NUM,
@@ -248,7 +238,8 @@ thetauvc_find_device_by_serial(uvc_context_t * ctx, uvc_device_t ** devh,
 uvc_error_t
 thetauvc_get_stream_ctrl_format_size(uvc_device_handle_t * devh,
 				     unsigned int mode,
-				     uvc_stream_ctrl_t * ctrl)
+				     uvc_stream_ctrl_t * ctrl,
+				     thetauvc_mode_t *mode_val)
 {
     uvc_error_t res;
     thetauvc_mode_t *m;
@@ -262,33 +253,12 @@ thetauvc_get_stream_ctrl_format_size(uvc_device_handle_t * devh,
 	    m = &stream_mode[i];
     }
 
+    memcpy(mode_val, m, sizeof(thetauvc_mode_t));
     res = uvc_get_stream_ctrl_format_size(devh, ctrl,
 					  UVC_FRAME_FORMAT_H264, m->width,
 					  m->height, m->fps);
 
     return res;
-}
-
-uvc_error_t
-thetauvc_run_streaming(uvc_device_t * dev, uvc_device_handle_t ** devh,
-		       unsigned int mode, uvc_frame_callback_t * cb,
-		       void *pdata)
-{
-    uvc_error_t res;
-    uvc_stream_ctrl_t ctrl;
-
-    res = uvc_open(dev, devh);
-    if (res != UVC_SUCCESS)
-	return res;
-    thetauvc_get_stream_ctrl_format_size(*devh, mode, &ctrl);
-    if (res != UVC_SUCCESS)
-	printf("error");
-
-    res = uvc_start_streaming(*devh, &ctrl, cb, pdata, 0);
-
-    uvc_close(*devh);
-
-    return UVC_SUCCESS;
 }
 
 uvc_error_t

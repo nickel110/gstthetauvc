@@ -43,11 +43,21 @@ extern "C" {
 #define USBPID_THETAX_UVC 0x2717
 
 enum thetauvc_mode_code {
-	THETAUVC_MODE_FHD_2997 = 0,
-	THETAUVC_MODE_UHD_2997,
-	THETAUVC_MODE_FHD_2997S,
+	THETAUVC_MODE_FHD = 0,
+	THETAUVC_MODE_UHD,
+	THETAUVC_MODE_FHD_S,
 	THETAUVC_MODE_NUM
 };
+
+struct thetauvc_mode
+{
+    unsigned int mode;
+    unsigned int width;
+    unsigned int height;
+    unsigned int fps;
+};
+
+typedef struct thetauvc_mode thetauvc_mode_t;
 
 extern uvc_error_t thetauvc_find_devices(uvc_context_t *, uvc_device_t ***);
 extern uvc_error_t thetauvc_print_devices(uvc_context_t *, FILE *);
@@ -56,7 +66,7 @@ extern uvc_error_t thetauvc_find_device(uvc_context_t *, uvc_device_t **,
 extern uvc_error_t thetauvc_find_device_by_serial(uvc_context_t *,
 	uvc_device_t **, const char *);
 extern uvc_error_t thetauvc_get_stream_ctrl_format_size(uvc_device_handle_t *,
-	unsigned int, uvc_stream_ctrl_t *);
+	unsigned int, uvc_stream_ctrl_t *, thetauvc_mode_t *);
 extern uvc_error_t thetauvc_run_streaming(uvc_device_t *, uvc_device_handle_t **,
 	unsigned int, uvc_frame_callback_t *, void *);
 extern uvc_error_t thetauvc_switch_configuration(uint8_t, uint8_t, uint8_t);
